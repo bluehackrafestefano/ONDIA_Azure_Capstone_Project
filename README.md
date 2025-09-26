@@ -1,5 +1,11 @@
 # 🚀 Project-401: Grafana Service deployed on Azure VMSS connected to a Load Balancer, PostgreSQL Flexible DB, VNet Components, Azure DNS, NAT Gateway, Bastion, Storage Account, and Azure Monitor — deployed with Terraform using Azure Entra ID to manage identities.
 
+## 🔧 Prerequisites
+- Azure CLI installed and logged in (`az login`)
+- Terraform v1.6+ installed
+- An active Azure subscription
+- Sufficient IAM permissions: Contributor + User Access Administrator
+
 ## 🎯 Description
 This project demonstrates how to deliver **Grafana as a Service** on Azure deployed with **Terraform**.  
 
@@ -245,5 +251,61 @@ A critical part of the architecture is enabling monitoring, diagnostics, and sec
   - Email
   - Microsoft Teams
   - PagerDuty or custom webhook
+
+---
+
+## 🔑 Entra ID (Azure Active Directory) Integration for Grafana
+
+To secure Grafana with Azure Entra ID (formerly Azure AD), follow these manual steps:
+
+### 1. Create an App Registration
+1. In the Azure Portal, go to **Microsoft Entra ID** → **App registrations** → **New registration**.
+2. Set:
+   - **Name**: `grafana-app`
+   - **Supported account types**: `Accounts in this organizational directory only`
+   - **Redirect URI**: `https://<your-grafana-dns>/login/azuread`
+3. Click **Register**.
+
+### 2. Configure Authentication
+1. In the new app, go to **Authentication**.
+2. Add:
+   - Redirect URI: `https://<your-grafana-dns>/login/azuread`
+   - Logout URL: `https://<your-grafana-dns>/logout`
+3. Enable **ID tokens** under *Implicit grant*.
+
+### 3. Create a Client Secret
+1. Go to **Certificates & secrets**.
+2. Click **New client secret** → Add description → Set expiry (e.g., 12 months).
+3. Copy the **secret value** (you will need it for Grafana config).
+
+### 4. Collect IDs
+From the app **Overview** page, note:
+- **Application (client) ID**
+- **Directory (tenant) ID**
+
+### 5. Configure Grafana
+On your Grafana VM(s), edit `/etc/grafana/grafana.ini` and add:
+
+```ini
+[auth.azuread]
+name = AzureAD
+enabled = true
+allow_sign_up = true
+client_id = <Application (client) ID>
+client_secret = <Client Secret>
+scopes = openid email profile
+auth_url = https://login.microsoftonline.com/<Tenant ID>/oauth2/v2.0/authorize
+token_url = https://login.microsoftonline.com/<Tenant ID>/oauth2/v2.0/token
+```
+
+Restart Grafana:
+
+```bash
+sudo systemctl restart grafana-server
+```
+
+### 6. Test
+- Navigate to `https://<your-grafana-dns>`.
+- You should now see **Sign in with Microsoft** as a login option.
 
 ---
