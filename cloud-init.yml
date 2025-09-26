@@ -1,0 +1,5 @@
+#cloud-config
+package_upgrade: true
+runcmd:
+  - curl https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh | sudo bash
+  - EXTERNAL_URL="http://$(hostname -I | awk '{print $1}')" apt-get install -y gitlab-ce
