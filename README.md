@@ -9,16 +9,16 @@ This project is deploying:
 - Access through an **Azure Load Balancer**  
 - Authentication via **Azure Entra ID** (OAuth2)  
 
-Possible to extend to multiple customers and turns to a **Grafana as a Service** product.
+Possible to extend to multiple customers and turn into a **Grafana as a Service** product.
 
 ---
 
 ## 🏗️ High-Level Architecture
 - **Resource Group** → groups customer resources  
 - **Virtual Network & Subnet** → isolated networking per deployment  
-- **Azure Linux VM** → runs GitLab CE  
-- **Azure Database for PostgreSQL Flexible Server** → external DB for GitLab  
-- **Azure Load Balancer** → front door for GitLab instances  
+- **Azure Linux VM** → runs Grafana OSS  
+- **Azure Database for PostgreSQL Flexible Server** → external DB for Grafana  
+- **Azure Load Balancer** → front door for Grafana instances  
 - **Azure Entra ID** → provides secure login for users  
 
 ---
@@ -43,19 +43,17 @@ Possible to extend to multiple customers and turns to a **Grafana as a Service**
 ## 📚 References
 - [Terraform Azure Provider](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs)  
 - [Azure Database for PostgreSQL Flexible Server](https://learn.microsoft.com/en-us/azure/postgresql/flexible-server/)  
-- [GitLab CE installation guide](https://about.gitlab.com/install/#ubuntu)  
-- [GitLab OAuth2 Generic Provider](https://docs.gitlab.com/ee/integration/oauth2_generic.html)  
+- [Grafana installation guide](https://grafana.com/docs/grafana/latest/setup-grafana/installation/)  
+- [Grafana OAuth2 Generic Authentication](https://grafana.com/docs/grafana/latest/setup-grafana/configure-security/configure-authentication/oauth/)  
 - [Microsoft Docs: Register an app with Microsoft identity platform](https://learn.microsoft.com/en-us/azure/active-directory/develop/quickstart-register-app)  
-- [Microsoft Docs: Configure SSO with GitLab](https://learn.microsoft.com/en-us/azure/active-directory/saas-apps/gitlab-tutorial)  
+- [Microsoft Docs: Configure SSO with Grafana](https://learn.microsoft.com/en-us/azure/active-directory/saas-apps/grafana-tutorial)  
 
 ---
 
 ## ✅ Expected Outcomes
 By using this project, students and practitioners will:  
 - Learn to deploy **infrastructure as code** with Terraform on Azure  
-- Deploy **GitLab CE** backed by an external PostgreSQL database  
+- Deploy **Grafana OSS** backed by an external PostgreSQL database  
 - Understand how to design a **multi-tenant SaaS system** on Azure  
 - Enable **secure login** with Azure Entra ID  
 - Explore scaling and automation patterns for **customer onboarding**  
-
----
