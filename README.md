@@ -134,7 +134,7 @@ Once networking is in place, we deploy compute, databases, and application servi
 
 ### 1. Deploy Azure VM Scale Set (VMSS)
 - Create a **Linux-based VMSS** to host Grafana instances.
-- Use a custom \`cloud-init\` or provisioning script to install Grafana (see \`cloud-init.yaml\`).
+- Use a custom `cloud-init` or provisioning script to install Grafana (see `cloud-init.yaml`).
 - Configure **autoscaling** rules via **Azure Monitor** (scale out on CPU/memory, scale in during low load).
 - Place VMSS in **app-subnet**.
 
@@ -154,16 +154,16 @@ Once networking is in place, we deploy compute, databases, and application servi
 - Grafana will use this DB for dashboards, users, and data sources.
 
 ### 4. Configure Grafana Installation
-- Use \`cloud-init\` to:
+- Use `cloud-init` to:
   - Install Grafana OSS from the official APT repo.
-  - Enable and start \`grafana-server\` service.
+  - Enable and start `grafana-server` service.
 - Optionally, pre-provision:
   - **Data sources** (PostgreSQL, Azure Monitor).
-  - **Dashboards** via \`/etc/grafana/provisioning/\`.
+  - **Dashboards** via `/etc/grafana/provisioning/`.
 
 ### 5. Integrate with Azure Entra ID
 - Register **Grafana app** in Entra ID.
-- Configure OAuth2 settings in Grafana (\`grafana.ini\`).
+- Configure OAuth2 settings in Grafana (`grafana.ini`).
 - Grant necessary permissions (profile, openid, email).
 - Enables **SSO** for enterprise users.
 
@@ -178,7 +178,7 @@ Once networking is in place, we deploy compute, databases, and application servi
 - Create **dashboards** for end-to-end observability.
 
 ### 8. Azure DNS Integration
-- Create a DNS zone (e.g. \`grafana.example.com\`).
+- Create a DNS zone (e.g. `grafana.example.com`).
 - Map Load Balancer’s public IP to a friendly domain.
 - Users access Grafana securely via FQDN.
 
@@ -190,7 +190,7 @@ A critical part of the architecture is enabling monitoring, diagnostics, and sec
 
 ### 1. Create Storage Account
 - Go to **Azure Portal → Storage Accounts → Create**.
-- Example: \`stgdiaglogs\`.
+- Example: `stgdiaglogs`.
 - Use **Standard / LRS** for cost-effective log storage.
 - This stores **boot diagnostics** and **long-term logs**.
 
@@ -206,31 +206,31 @@ A critical part of the architecture is enabling monitoring, diagnostics, and sec
   - **Boot diagnostics logs**.
 
 ### 3. Create Log Analytics Workspace
-- Create workspace \`law-grafana\`.
+- Create workspace `law-grafana`.
 - Associate with resources in diagnostic settings.
 - Central place for logs and queries.
 
 ### 4. Collect SSH Attempt Logs
 - Ensure **Azure Monitor Agent** is installed on VMSS instances.
 - Configure it to collect:
-  - Facility: \`auth\`
-  - Severity: \`info\` or higher
+  - Facility: `auth`
+  - Severity: `info` or higher
 - Example KQL to detect SSH brute-force attempts:
-  \`\`\`kusto
+  ```kusto
   Syslog
   | where Facility == "auth"
   | where SyslogMessage contains "Failed password"
   | summarize Attempts = count() by Computer, IPAddress = extract("from ([0-9.]+)", 1, SyslogMessage)
   | order by Attempts desc
-  \`\`\`
+  ```
 
 ### 5. Create Monitoring Dashboards
 - In **Azure Portal → Dashboard → Create**:
   - Add **Metrics tile** for VMSS:
-    - Metric: \`Percentage CPU\`
+    - Metric: `Percentage CPU`
     - Visualization: Line chart
   - Add **Log Analytics tile** with KQL query (SSH attempts).
-  - Save dashboard as \`Grafana-Service-Monitoring\`.
+  - Save dashboard as `Grafana-Service-Monitoring`.
 
 ### 6. Integrate with Grafana (Optional)
 - Add **Azure Monitor data source** in Grafana.

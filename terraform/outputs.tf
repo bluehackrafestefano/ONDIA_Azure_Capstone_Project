@@ -1,9 +1,14 @@
-output "gitlab_vm_public_ip" {
-  description = "Public IP of the GitLab VM"
-  value       = azurerm_public_ip.public_ip.ip_address
+output "resource_group" {
+  description = "Name of the Resource Group"
+  value       = var.rg_name
 }
 
-output "postgresql_hostname" {
-  description = "PostgreSQL Flexible Server FQDN"
-  value       = azurerm_postgresql_flexible_server.pg.fqdn
+output "location" {
+  description = "Azure region used for deployment"
+  value       = var.location
+}
+
+output "grafana_url" {
+  description = "Public URL for Grafana service"
+  value       = module.compute.grafana_url
 }
