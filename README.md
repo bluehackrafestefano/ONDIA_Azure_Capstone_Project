@@ -40,7 +40,20 @@ Possible to extend to multiple customers and turn into a **Grafana as a Service*
 - **Authentication:** Integrated with **Azure Entra ID** for enterprise SSO  
 - **Secure Access:** Bastion provides hardened administrative access  
 - **Monitoring & Logging:** Metrics, logs, and alerts collected with Azure Monitor + Log Analytics  
-- **Extensibility:** Can evolve towards App Gateway with WAF, containerized Grafana on AKS, or multi-region deployments
+- **Extensibility:** Can evolve towards App Gateway with WAF, containerized Grafana on AKS, or multi-region deployments  
+
+---
+
+## ✅ Expected Outcomes
+By using this project, students and practitioners will:  
+- Learn to deploy **infrastructure as code** with Terraform on Azure  
+- Deploy **Grafana OSS** backed by a managed PostgreSQL Flexible DB  
+- Implement **secure and scalable infrastructure** with VMSS + Load Balancer  
+- Gain experience integrating **Azure NAT Gateway, Bastion, and Storage Accounts**  
+- Learn **observability practices** using Azure Monitor (metrics, logs, alerts, autoscale)  
+- Enable **secure login** with Azure Entra ID  
+- Understand how to design and scale a **multi-tenant SaaS system** on Azure  
+- Explore automation patterns for **customer onboarding and scaling**  
 
 ---
 
@@ -57,14 +70,58 @@ Possible to extend to multiple customers and turn into a **Grafana as a Service*
 
 ---
 
-## ✅ Expected Outcomes
-By using this project, students and practitioners will:  
-- Learn to deploy **infrastructure as code** with Terraform on Azure  
-- Deploy **Grafana OSS** backed by a managed PostgreSQL Flexible DB  
-- Implement **secure and scalable infrastructure** with VMSS + Load Balancer  
-- Gain experience integrating **Azure NAT Gateway, Bastion, and Storage Accounts**  
-- Learn **observability practices** using Azure Monitor (metrics, logs, alerts, autoscale)  
-- Enable **secure login** with Azure Entra ID  
-- Understand how to design and scale a **multi-tenant SaaS system** on Azure  
-- Explore automation patterns for **customer onboarding and scaling**  
+## 🧱 Project Setup: Network & Foundational Components
 
+Before deploying VMs, databases, and Grafana, we first build the networking foundation. These are the steps to create the network components:
+
+### 1. Create Resource Group
+- Choose a **resource group** to contain all project resources (VNet, subnets, NSGs, NAT, Bastion, etc.).
+- Use meaningful naming (e.g. `rg-grafana-prod`) to reflect purpose and lifecycle.  
+- Reference: [Azure N-Tier Linux VM Architecture](https://learn.microsoft.com/en-us/azure/architecture/reference-architectures/n-tier/linux-vm)
+
+### 2. Provision Virtual Network (VNet)
+- Create an Azure **Virtual Network** for the project (e.g. `vnet-grafana`).
+- Define an appropriate address space (e.g. `10.0.0.0/16`).
+- This VNet will host subnets such as application, database, bastion, etc.
+
+### 3. Define Subnets
+Segment the VNet into subnets for different tiers:
+
+| Subnet Name     | Purpose                                  |
+|-----------------|------------------------------------------|
+| **app-subnet**  | Hosts Grafana VMSS and related services  |
+| **db-subnet**   | Contains the PostgreSQL Flexible Server  |
+| **bastion-subnet** | Hosts Azure Bastion for secure admin access |
+| **infra-subnet** (optional) | NAT Gateway, jump boxes, or shared services |
+
+Ensure each subnet’s prefix is non-overlapping and sized appropriately.
+
+### 4. Network Security Groups (NSGs)
+- Create **NSGs** to control inbound/outbound traffic per subnet or VM NIC.
+- Default NSG rules block inbound from Internet—so add rules to allow necessary ports:
+  - Grafana HTTP(s) → TCP 3000, 443
+  - SSH (TCP 22) → Bastion/admin access only
+- Attach NSGs at **subnet level** or **NIC level** depending on granularity needed.
+
+### 5. Public IPs and DNS
+- Provision **Public IP addresses** for resources that need external access (e.g. Load Balancer frontend, NAT Gateway).
+- Reserve **static IPs** when stable DNS records are required.
+- Assign a **fully qualified domain name (FQDN)** to public IPs and integrate with **Azure DNS** or an external DNS provider.
+
+### 6. NAT Gateway (Outbound Internet)
+- Deploy an **Azure NAT Gateway** to allow outbound Internet connectivity for VMs in private subnets without assigning them public IPs.
+- Associate the NAT Gateway with your subnets (e.g. app-subnet, db-subnet).
+- Ensures only initiated connections go out, blocking unsolicited inbound traffic by default.
+
+### 7. Bastion Host (Secure Admin Access)
+- Deploy **Azure Bastion** in the **bastion-subnet**.
+- Bastion enables secure SSH/RDP to VMs in the VNet over TLS without public IPs on the VMs.
+- Improves security posture by minimizing exposed endpoints.
+
+### 8. Diagnostics & Logging Infrastructure
+- Provision a **Storage Account** (e.g. `stgdiaglogs`) to store boot diagnostics and VM logs.
+- Enable diagnostic settings to send metrics, logs, and activity logs into:
+  - **Log Analytics**
+  - **Storage**
+  - **Azure Monitor**
+- Ensures observability and simplifies troubleshooting.
