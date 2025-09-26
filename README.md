@@ -1,13 +1,12 @@
-# 🚀 Project-401: Grafana Service deployed on Azure VMSS connected to a Load Balancer, PostgreSQL Flexible DB, VNet Components, Azure DNS, NAT Gateway, Bastion, Storage Account, and Azure Monitor — deployed with Terraform using Azure Entra ID to manage identities.
+# 🚀 Project-401: Grafana Service deployed on Azure VMSS connected to a Load Balancer, PostgreSQL Flexible DB, VNet Components, Azure DNS, NAT Gateway, Bastion, Storage Account, and Azure Monitor using Azure Entra ID to manage identities.
 
 ## 🔧 Prerequisites
 - Azure CLI installed and logged in (`az login`)
-- Terraform v1.6+ installed
 - An active Azure subscription
 - Sufficient IAM permissions: Contributor + User Access Administrator
 
 ## 🎯 Description
-This project demonstrates how to deliver **Grafana as a Service** on Azure deployed with **Terraform**.  
+This project demonstrates how to deliver **Grafana as a Service** deployed on Azure.  
 
 This project is deploying:
 - **VM Scale Set (VMSS)** running Grafana  
@@ -39,8 +38,7 @@ Possible to extend to multiple customers and turn into a **Grafana as a Service*
 
 ---
 
-## ✨ Key Features
-- **Infrastructure as Code (IaC):** Terraform templates define the full environment  
+## ✨ Key Features  
 - **Scalability:** Grafana runs on **VMSS** with autoscaling via Azure Monitor  
 - **Database Isolation:** Each customer has their own PostgreSQL Flexible DB  
 - **Authentication:** Integrated with **Azure Entra ID** for enterprise SSO  
@@ -51,8 +49,7 @@ Possible to extend to multiple customers and turn into a **Grafana as a Service*
 ---
 
 ## ✅ Expected Outcomes
-By using this project, students and practitioners will:  
-- Learn to deploy **infrastructure as code** with Terraform on Azure  
+By using this project, students and practitioners will:
 - Deploy **Grafana OSS** backed by a managed PostgreSQL Flexible DB  
 - Implement **secure and scalable infrastructure** with VMSS + Load Balancer  
 - Gain experience integrating **Azure NAT Gateway, Bastion, and Storage Accounts**  
@@ -64,7 +61,6 @@ By using this project, students and practitioners will:
 ---
 
 ## 📚 References
-- [Terraform Azure Provider](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs)  
 - [Azure Database for PostgreSQL Flexible Server](https://learn.microsoft.com/en-us/azure/postgresql/flexible-server/)  
 - [Grafana installation guide](https://grafana.com/docs/grafana/latest/setup-grafana/installation/)  
 - [Grafana OAuth2 Generic Authentication](https://grafana.com/docs/grafana/latest/setup-grafana/configure-security/configure-authentication/oauth/)  
