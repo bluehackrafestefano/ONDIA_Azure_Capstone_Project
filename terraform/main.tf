@@ -2,14 +2,18 @@ provider "azurerm" {
   features {}
 }
 
+# ------------------------
 # Network stack
+# ------------------------
 module "network" {
   source   = "./modules/network"
   rg_name  = var.rg_name
   location = var.location
 }
 
+# ------------------------
 # Database stack
+# ------------------------
 module "database" {
   source        = "./modules/database"
   rg_name       = var.rg_name
@@ -18,7 +22,9 @@ module "database" {
   db_subnet_id  = module.network.db_subnet_id
 }
 
+# ------------------------
 # Compute stack (Grafana VMSS + LB + DNS)
+# ------------------------
 module "compute" {
   source            = "./modules/compute"
   rg_name           = var.rg_name
@@ -28,13 +34,15 @@ module "compute" {
   db_connection     = module.database.db_connection
 }
 
+# ------------------------
 # Observability stack (Monitoring + Logs + Alerts)
+# ------------------------
 module "observability" {
-  source       = "./modules/observability"
-  rg_name      = var.rg_name
-  location     = var.location
-  vmss_id      = module.compute.vmss_id
-  postgres_id  = module.database.db_id
-  lb_id        = module.compute.lb_id
-  bastion_id   = module.network.bastion_id
+  source          = "./modules/observability"
+  rg_name         = var.rg_name
+  location        = var.location
+  vmss_id         = module.compute.vmss_id
+  lb_id           = module.compute.lb_id
+  db_id           = module.database.db_id
+  action_group_id = var.action_group_id
 }
