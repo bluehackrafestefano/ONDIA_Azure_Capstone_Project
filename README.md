@@ -125,3 +125,61 @@ Ensure each subnet’s prefix is non-overlapping and sized appropriately.
   - **Storage**
   - **Azure Monitor**
 - Ensures observability and simplifies troubleshooting.
+
+---
+
+## 🖥️ Project Setup: Compute & Application Components
+
+Once networking is in place, we deploy compute, databases, and application services.
+
+### 1. Deploy Azure VM Scale Set (VMSS)
+- Create a **Linux-based VMSS** to host Grafana instances.
+- Use a custom `cloud-init` or provisioning script to install Grafana (see `cloud-init.yaml`).
+- Configure **autoscaling** rules via **Azure Monitor** (scale out on CPU/memory, scale in during low load).
+- Place VMSS in **app-subnet**.
+
+### 2. Attach Load Balancer
+- Provision an **Azure Load Balancer**.
+- Configure:
+  - **Frontend IP** (public, with DNS label if needed).
+  - **Backend pool** (VMSS instances).
+  - **Health probes** (port 3000 for Grafana).
+  - **Load-balancing rules** for HTTP/HTTPS traffic.
+- Ensures high availability and seamless access to Grafana.
+
+### 3. Provision PostgreSQL Flexible Server
+- Deploy **Azure Database for PostgreSQL Flexible Server** in **db-subnet**.
+- Enable **VNet integration** to restrict access to internal VNets only.
+- Configure **firewall rules** and **admin credentials**.
+- Grafana will use this DB for dashboards, users, and data sources.
+
+### 4. Configure Grafana Installation
+- Use `cloud-init` to:
+  - Install Grafana OSS from the official APT repo.
+  - Enable and start `grafana-server` service.
+- Optionally, pre-provision:
+  - **Data sources** (PostgreSQL, Azure Monitor).
+  - **Dashboards** via `/etc/grafana/provisioning/`.
+
+### 5. Integrate with Azure Entra ID
+- Register **Grafana app** in Entra ID.
+- Configure OAuth2 settings in Grafana (`grafana.ini`).
+- Grant necessary permissions (profile, openid, email).
+- Enables **SSO** for enterprise users.
+
+### 6. Storage Integration
+- Connect VMSS diagnostic logs and Grafana logs to **Azure Storage Account**.
+- Optionally send logs to **Log Analytics** for centralized monitoring.
+
+### 7. Monitoring & Autoscale
+- Enable **Azure Monitor** for VMSS, PostgreSQL, and Grafana metrics.
+- Configure **alerts** (e.g., CPU > 70%).
+- Define **autoscale rules** (e.g., scale out when CPU > 70%, scale in when < 30%).
+- Create **dashboards** for end-to-end observability.
+
+### 8. Azure DNS Integration
+- Create a DNS zone (e.g. `grafana.example.com`).
+- Map Load Balancer’s public IP to a friendly domain.
+- Users access Grafana securely via FQDN.
+
+---
