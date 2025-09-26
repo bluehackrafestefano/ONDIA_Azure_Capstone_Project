@@ -1,5 +1,15 @@
 #cloud-config
 package_upgrade: true
 runcmd:
-  - curl https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh | sudo bash
-  - EXTERNAL_URL="http://$(hostname -I | awk '{print $1}')" apt-get install -y gitlab-ce
+  # Add Grafana APT repository
+  - wget -q -O - https://packages.grafana.com/gpg.key | sudo apt-key add -
+  - echo "deb https://packages.grafana.com/oss/deb stable main" | sudo tee /etc/apt/sources.list.d/grafana.list
+
+  # Update packages and install Grafana OSS
+  - apt-get update -y
+  - apt-get install -y grafana
+
+  # Enable and start Grafana service
+  - systemctl daemon-reload
+  - systemctl enable grafana-server
+  - systemctl start grafana-server
