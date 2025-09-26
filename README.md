@@ -18,6 +18,7 @@ Possible to extend to multiple customers and turn into a **Grafana as a Service*
 ---
 
 ## 🏗️ High-Level Architecture
+![Project Overview](Azure_Project_Grafana_Server.png)
 - **Resource Group** → groups customer resources  
 - **Virtual Network (VNet) & Subnets** → network isolation for DB, VMSS, and Bastion  
 - **Azure VMSS (Linux)** → hosts scalable Grafana OSS instances  
@@ -39,15 +40,7 @@ Possible to extend to multiple customers and turn into a **Grafana as a Service*
 - **Authentication:** Integrated with **Azure Entra ID** for enterprise SSO  
 - **Secure Access:** Bastion provides hardened administrative access  
 - **Monitoring & Logging:** Metrics, logs, and alerts collected with Azure Monitor + Log Analytics  
-- **Extensibility:** Can evolve towards App Gateway with WAF, containerized Grafana on AKS, or multi-region deployments  
-
----
-
-## 🔑 Multi-Customer Options
-- **Per-Customer Resources:** Each customer has their own VMSS, DB, DNS entry, and Entra app  
-- **Terraform Modules:** Encapsulate customer deployments for easy replication  
-- **Automation:** Inject credentials and Grafana provisioning settings with `cloud-init` or Terraform templates  
-- **Advanced:** Use a multi-tenant Entra app with centralized identity policies  
+- **Extensibility:** Can evolve towards App Gateway with WAF, containerized Grafana on AKS, or multi-region deployments
 
 ---
 
