@@ -77,33 +77,60 @@ By using this project, students and practitioners will:
 Before deploying VMs, databases, and Grafana, we first build the networking foundation. These are the steps to create the network components:
 
 ### 1. Create Resource Group
-- Choose a **resource group** to contain all project resources (VNet, subnets, NSGs, NAT, Bastion, etc.).
-- Use meaningful naming (e.g. `rg-grafana-prod`) to reflect purpose and lifecycle.  
-- Reference: [Azure N-Tier Linux VM Architecture](https://learn.microsoft.com/en-us/azure/architecture/reference-architectures/n-tier/linux-vm)
+- Create a **resource group** to contain all project resources (VNet, subnets, NSGs, NAT, Bastion, etc.).
+- Use meaningful naming (e.g. `rg-grafana-prod`) to reflect purpose and lifecycle.
+- Keep `East US` as the region. 
+- Click Create.
 
-### 2. Provision Virtual Network (VNet)
+### 2. Provision Virtual Network (VNet) and Bastion
+- Select the related subscription and the resource group.
 - Create an Azure **Virtual Network** for the project (e.g. `vnet-grafana`).
-- Define an appropriate address space (e.g. `10.0.0.0/16`).
+- Under IP Adresses tab, define an appropriate address space (e.g. `10.0.0.0/16`).
+- Under Security tab, select `Enable Azure Bastion` option.
 - This VNet will host subnets such as application, database, bastion, etc.
 
 ### 3. Define Subnets
-Segment the VNet into subnets for different tiers:
+- A subnet for Bastion is automatically created during the previous step.
+- Open the page of the VNet we just created
+- Navigate to `Settings` on the left side menu.
+- Open `Subnets`.
+- Delete the default Subnet.
+- See the Bastion Subnet is already created here.
+- Create the subnets to segment the VNet into subnets for different tiers.
+- Keep `Subnet purpose` as `Default`
+- Assign names and IP ranges as below.
 
-| Subnet Name     | Purpose                                  |
-|-----------------|------------------------------------------|
-| **app-subnet**  | Hosts Grafana VMSS and related services  |
-| **db-subnet**   | Contains the PostgreSQL Flexible Server  |
-| **bastion-subnet** | Hosts Azure Bastion for secure admin access |
-| **infra-subnet** (optional) | NAT Gateway, jump boxes, or shared services |
+| Subnet Name     | Purpose                                  | Range | Feature |
+|-----------------|------------------------------------------|-------|---------|
+| **app-subnet**  | Hosts Grafana VMSS and related services  | 10.0.2.0 | |
+| **db-subnet**   | Contains the PostgreSQL Flexible Server  | 10.0.3.0 | Enable private subnet |
 
-Ensure each subnet’s prefix is non-overlapping and sized appropriately.
+- Ensure each subnet’s prefix is non-overlapping and sized appropriately.
 
 ### 4. Network Security Groups (NSGs)
-- Create **NSGs** to control inbound/outbound traffic per subnet or VM NIC.
-- Default NSG rules block inbound from Internet—so add rules to allow necessary ports:
-  - Grafana HTTP(s) → TCP 3000, 443
-  - SSH (TCP 22) → Bastion/admin access only
-- Attach NSGs at **subnet level** or **NIC level** depending on granularity needed.
+
+To enforce subnet-level security, define one NSG per subnet:
+
+#### Database Subnet (`db-subnet`)
+- **Purpose:** Restrict access to PostgreSQL Flexible Server.  
+- **Rules:**
+  - ✅ Allow inbound **5432 (PostgreSQL)** **only from `app-subnet` (VMSS)**  
+  - ❌ Deny all other inbound traffic  
+
+#### Application Subnet (`app-subnet`)
+- **Purpose:** Host Grafana VMSS and expose it securely.  
+- **Rules:**
+  - ✅ Allow inbound **22 (SSH)** **only from `bastion-subnet`**  
+  - ✅ Allow inbound **80 (HTTP)** from Internet  
+  - ✅ Allow inbound **443 (HTTPS)** from Internet  
+  - ❌ Deny all other inbound traffic  
+
+#### Bastion Subnet (`bastion-subnet`)
+- **Purpose:** Secure entry point for administrators.  
+- **Rules:**
+  - ✅ Allow inbound **443 (HTTPS)** from Internet so you can open the portal session.
+  - ❌ No need to open 22/3389 (Bastion tunnels SSH/RDP internally)  
+  - ❌ Deny all other inbound traffic  
 
 ### 5. Public IPs and DNS
 - Provision **Public IP addresses** for resources that need external access (e.g. Load Balancer frontend, NAT Gateway).
@@ -115,18 +142,50 @@ Ensure each subnet’s prefix is non-overlapping and sized appropriately.
 - Associate the NAT Gateway with your subnets (e.g. app-subnet, db-subnet).
 - Ensures only initiated connections go out, blocking unsolicited inbound traffic by default.
 
-### 7. Bastion Host (Secure Admin Access)
-- Deploy **Azure Bastion** in the **bastion-subnet**.
-- Bastion enables secure SSH/RDP to VMs in the VNet over TLS without public IPs on the VMs.
-- Improves security posture by minimizing exposed endpoints.
-
-### 8. Diagnostics & Logging Infrastructure
+### 7. Diagnostics & Logging Infrastructure
 - Provision a **Storage Account** (e.g. `stgdiaglogs`) to store boot diagnostics and VM logs.
 - Enable diagnostic settings to send metrics, logs, and activity logs into:
   - **Log Analytics**
   - **Storage**
   - **Azure Monitor**
 - Ensures observability and simplifies troubleshooting.
+
+---
+
+## 🔑 Admin Access to VMs
+
+All administrative access to the VM Scale Set (VMSS) instances is done securely via **Azure Bastion**.  
+This avoids exposing **SSH (22)** to the Internet.
+
+### 1. SSH via Azure Portal (Browser-Based)
+1. Navigate to the VM or VMSS instance in the **Azure Portal**.
+2. Click **Connect → Bastion**.
+3. Enter your admin username and private key / password.
+4. An **SSH session opens directly in your browser**, tunneled over HTTPS (443).
+
+- Bastion connects to the VM’s **private IP on port 22**.
+- No public IPs are required on the VMs.
+
+### 2. SSH via Native Client (Optional)
+For admins who prefer using their terminal, Azure Bastion also supports native client tunneling.
+
+1. Open a tunnel with Azure CLI:
+
+   ```bash
+   az network bastion tunnel --name <bastion-name> \
+     --resource-group <rg-name> \
+     --target-resource-id <vm-id> \
+     --resource-port 22 \
+     --port 50022
+   ```
+
+2. Connect via SSH through the tunnel:
+
+   ```bash
+   ssh -p 50022 <admin-user>@127.0.0.1
+   ```
+
+This keeps **port 22 closed to the Internet** while still providing secure SSH access for administrators.
 
 ---
 
