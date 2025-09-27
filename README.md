@@ -174,60 +174,31 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
     - Description: `Allow HTTPS traffic from the Internet to Azure Bastion service.`  
   - Azure Bastion tunnels these protocols internally, so they should remain closed externally.
 
-### 5. Public IPs and DNS
-- Provision **Public IP addresses** for resources that need external access (e.g. Load Balancer frontend, NAT Gateway).
-- Reserve **static IPs** when stable DNS records are required.
-- Assign a **fully qualified domain name (FQDN)** to public IPs and integrate with **Azure DNS** or an external DNS provider.
+### 5. Public IPs
+- Provision **Public IP addresses** for resources that require external access:
+  - **Bastion** → Already provisioned automatically when creating Bastion (`vnet-grafana-bastion Public IP`). Used **only** for administrators via Azure Portal.
+  - **Load Balancer frontend** → Requires a **static Public IP** to serve Grafana traffic to end-users.
+
+#### Steps to Create a Public IP (for Load Balancer frontend)
+- In the Azure Portal, go to **Create a resource** → Search for **Public IP Address**.
+- Fill in the details:
+  - **Resource group**: Use the same RG as your Load Balancer.
+  - **Name**: `grafana-lb-ip`
+  - **SKU**: Standard (recommended for production, supports availability zones).
+  - **Availability zone**: Zone-redundant
+  - **IP address assignment**: Static (to keep the same IP for DNS).
+  - **Tier**: Regional (default).
+  - **Region**: `East US`
+  - **DNS name label**: `grafana-project-<your-name-here>`
+- Click **Review + Create** → **Create**.
+- Associate this Public IP with your Load Balancer frontend configuration later. FIXME
 
 ### 6. NAT Gateway (Outbound Internet)
-- Deploy an **Azure NAT Gateway** to allow outbound Internet connectivity for VMs in private subnets without assigning them public IPs.
-- Associate the NAT Gateway with your subnets (e.g. app-subnet, db-subnet).
+- Deploy an **Azure NAT Gateway** to allow outbound Internet connectivity for VMs in private subnets **without assigning public IPs** to each VM.
+- Associate the NAT Gateway with:
+  - **app-subnet** → Required for VMSS (Grafana servers) to download updates and connect to external services.
+  - **db-subnet** (optional) → If PostgreSQL server requires outbound patching or updates.
 - Ensures only initiated connections go out, blocking unsolicited inbound traffic by default.
-
-### 7. Diagnostics & Logging Infrastructure
-- Provision a **Storage Account** (e.g. `stgdiaglogs`) to store boot diagnostics and VM logs.
-- Enable diagnostic settings to send metrics, logs, and activity logs into:
-  - **Log Analytics**
-  - **Storage**
-  - **Azure Monitor**
-- Ensures observability and simplifies troubleshooting.
-
----
-
-## 🔑 Admin Access to VMs
-
-All administrative access to the VM Scale Set (VMSS) instances is done securely via **Azure Bastion**.  
-This avoids exposing **SSH (22)** to the Internet.
-
-### 1. SSH via Azure Portal (Browser-Based)
-1. Navigate to the VM or VMSS instance in the **Azure Portal**.
-2. Click **Connect → Bastion**.
-3. Enter your admin username and private key / password.
-4. An **SSH session opens directly in your browser**, tunneled over HTTPS (443).
-
-- Bastion connects to the VM’s **private IP on port 22**.
-- No public IPs are required on the VMs.
-
-### 2. SSH via Native Client (Optional)
-For admins who prefer using their terminal, Azure Bastion also supports native client tunneling.
-
-1. Open a tunnel with Azure CLI:
-
-   ```bash
-   az network bastion tunnel --name <bastion-name> \
-     --resource-group <rg-name> \
-     --target-resource-id <vm-id> \
-     --resource-port 22 \
-     --port 50022
-   ```
-
-2. Connect via SSH through the tunnel:
-
-   ```bash
-   ssh -p 50022 <admin-user>@127.0.0.1
-   ```
-
-This keeps **port 22 closed to the Internet** while still providing secure SSH access for administrators.
 
 ---
 
@@ -284,6 +255,43 @@ Once networking is in place, we deploy compute, databases, and application servi
 - Create a DNS zone (e.g. `grafana.example.com`).
 - Map Load Balancer’s public IP to a friendly domain.
 - Users access Grafana securely via FQDN.
+
+---
+
+## 🔑 Admin Access to VMs
+
+All administrative access to the VM Scale Set (VMSS) instances is done securely via **Azure Bastion**.  
+This avoids exposing **SSH (22)** to the Internet.
+
+### 1. SSH via Azure Portal (Browser-Based)
+1. Navigate to the VM or VMSS instance in the **Azure Portal**.
+2. Click **Connect → Bastion**.
+3. Enter your admin username and private key / password.
+4. An **SSH session opens directly in your browser**, tunneled over HTTPS (443).
+
+- Bastion connects to the VM’s **private IP on port 22**.
+- No public IPs are required on the VMs.
+
+### 2. SSH via Native Client (Optional)
+For admins who prefer using their terminal, Azure Bastion also supports native client tunneling.
+
+1. Open a tunnel with Azure CLI:
+
+   ```bash
+   az network bastion tunnel --name <bastion-name> \
+     --resource-group <rg-name> \
+     --target-resource-id <vm-id> \
+     --resource-port 22 \
+     --port 50022
+   ```
+
+2. Connect via SSH through the tunnel:
+
+   ```bash
+   ssh -p 50022 <admin-user>@127.0.0.1
+   ```
+
+This keeps **port 22 closed to the Internet** while still providing secure SSH access for administrators.
 
 ---
 
