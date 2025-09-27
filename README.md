@@ -200,6 +200,23 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
   - **db-subnet** (optional) → If PostgreSQL server requires outbound patching or updates.
 - Ensures only initiated connections go out, blocking unsolicited inbound traffic by default.
 
+#### Steps to Create a NAT Gateway
+- In the Azure Portal, go to **Create a resource** → Search for **NAT Gateway**.
+- Fill in the details:
+  - **Resource group**: Same as your VNet/VMSS.
+  - **Name**: `nat-gateway-app`
+  - **Region**: Match the VNet region.
+  - **Public IP**: Assign `grafana-lb-ip`.
+  - **Idle timeout (minutes)**: Default (4) or adjust if your workloads need longer connections.
+  - Select **Virtual Network**: `vnet-grafana`
+  - Select Subnet(s): `app-subnet`, optionally `db-subnet`.
+  - Click **Review + Create** → **Create**.
+
+✅ This setup ensures:
+- **VMSS instances** in `app-subnet` can access the Internet (e.g., for OS updates, downloading Grafana plugins).
+- **DB server** in `db-subnet` can optionally use NAT for outbound updates.
+- No **inbound access** is exposed — traffic is strictly one-way.
+
 ---
 
 ## 🖥️ Project Setup: Compute & Application Components
