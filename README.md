@@ -109,28 +109,98 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 
 ### 4. Network Security Groups (NSGs)
 
-To enforce subnet-level security, define one NSG per subnet:
+- To enforce subnet-level security, define one NSG per subnet according to the information below.
+- First create all NSGs.
+- Associate them to related subnets.
+- Lastly add inbound rules.
 
-#### Database Subnet (`db-subnet`)
-- **Purpose:** Restrict access to PostgreSQL Flexible Server.  
+#### Database Subnet NSG (`db-subnet-sg`)
+- **Purpose:** Enable access to PostgreSQL Flexible Server from VMs.  
 - **Rules:**
-  - ✅ Allow inbound **5432 (PostgreSQL)** **only from `app-subnet` (VMSS)**  
-  - ❌ Deny all other inbound traffic  
+  - ✅ Allow inbound **5432 (PostgreSQL)** **only from `app-subnet-sg` (VMSS)**  
+    - Source: IP Adresses
+    - Source IP addresses/CIDR ranges: `10.0.2.0/24`
+    - Source port ranges: *
+    - Destination: Any
+    - Service: PostgreSQL
+    - Action: Allow
+    - Priority: `1000`
+    - Name: `allow-app-to-db-5432`
+    - Description: `Allow PostgreSQL traffic from app-subnet (VMSS) only.`
+  - ❌ Deny all other inbound **5432 (PostgreSQL)** from VirtualNetwork  
+    - Source: Any 
+    - Source port ranges: *
+    - Destination: Any
+    - Service: PostgreSQL
+    - Action: Deny
+    - Priority: 1010
+    - Name: `deny-other-subnets-to-db`
+    - Description: `Blocks all VNet/subnet PostgreSQL (5432) traffic except from VMSS app-subnet. Overrides default AllowVnetInBound. Does not affect AzureLoadBalancer since DB is not behind LB.`
 
-#### Application Subnet (`app-subnet`)
+#### Application Subnet NSG (`app-subnet-sg`)
 - **Purpose:** Host Grafana VMSS and expose it securely.  
 - **Rules:**
-  - ✅ Allow inbound **22 (SSH)** **only from `bastion-subnet`**  
+  - ✅ Allow inbound **22 (SSH)** **only from Bastion subnet (`10.0.1.0/26`)**  
+    - Source: IP Addresses  
+    - Source IP addresses/CIDR ranges: `10.0.1.0/26`  
+    - Source port ranges: *  
+    - Destination: Any  
+    - Service: SSH  
+    - Action: Allow  
+    - Priority: `1000`  
+    - Name: `allow-bastion-to-vmss-ssh`  
+    - Description: `Allow SSH access to VMSS instances only via Azure Bastion subnet.`  
   - ✅ Allow inbound **80 (HTTP)** from Internet  
+    - Source: Any  
+    - Source port ranges: *  
+    - Destination: Any  
+    - Service: HTTP  
+    - Action: Allow  
+    - Priority: `1010`  
+    - Name: `allow-http-internet`  
+    - Description: `Allow public web (HTTP) traffic to Grafana through the Load Balancer.`  
   - ✅ Allow inbound **443 (HTTPS)** from Internet  
+    - Source: Any  
+    - Source port ranges: *  
+    - Destination: Any  
+    - Service: HTTPS  
+    - Action: Allow  
+    - Priority: `1020`  
+    - Name: `allow-https-internet`  
+    - Description: `Allow public secure (HTTPS) traffic to Grafana through the Load Balancer.`  
   - ❌ Deny all other inbound traffic  
+    - Source: Any  
+    - Source port ranges: *  
+    - Destination: Any  
+    - Service: Any  
+    - Action: Deny  
+    - Priority: `2000`  
+    - Name: `deny-all-inbound`  
+    - Description: `Explicitly block all other inbound traffic not covered by above rules.`
 
-#### Bastion Subnet (`bastion-subnet`)
-- **Purpose:** Secure entry point for administrators.  
+#### Bastion Subnet NSG (`bastion-subnet-sg`)
+- **Purpose:** Secure entry point for administrators using Azure Bastion.  
 - **Rules:**
-  - ✅ Allow inbound **443 (HTTPS)** from Internet so you can open the portal session.
-  - ❌ No need to open 22/3389 (Bastion tunnels SSH/RDP internally)  
+  - ✅ Allow inbound **443 (HTTPS)** from Internet  
+    - Source: Any  
+    - Source port ranges: *  
+    - Destination: Any  
+    - Service: HTTPS  
+    - Action: Allow  
+    - Priority: `1000`  
+    - Name: `allow-https-internet`  
+    - Description: `Allow HTTPS traffic from the Internet to Azure Bastion service.`  
+  - ❌ No need to open **22 (SSH)** or **3389 (RDP)**  
+    - Azure Bastion tunnels these protocols internally, so they should remain closed externally.  
   - ❌ Deny all other inbound traffic  
+    - Source: Any  
+    - Source port ranges: *  
+    - Destination: Any  
+    - Service: Any  
+    - Action: Deny  
+    - Priority: `2000`  
+    - Name: `deny-all-inbound`  
+    - Description: `Explicitly block all other inbound traffic for the Bastion subnet.`
 
 ### 5. Public IPs and DNS
 - Provision **Public IP addresses** for resources that need external access (e.g. Load Balancer frontend, NAT Gateway).
