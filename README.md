@@ -102,8 +102,8 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 
 | Subnet Name     | Purpose                                  | Range | Feature |
 |-----------------|------------------------------------------|-------|---------|
-| **app-subnet**  | Hosts Grafana VMSS and related services  | 10.0.2.0 | |
-| **db-subnet**   | Contains the PostgreSQL Flexible Server  | 10.0.3.0 | Enable private subnet |
+| **app-subnet**  | Hosts Grafana VMSS and related services  | 10.0.2.0/24 | |
+| **db-subnet**   | Contains the PostgreSQL Flexible Server  | 10.0.3.0/24 | Enable private subnet |
 
 - Ensure each subnet’s prefix is non-overlapping and sized appropriately.
 
@@ -117,7 +117,7 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 #### Database Subnet NSG (`db-subnet-sg`)
 - **Purpose:** Enable access to PostgreSQL Flexible Server from VMs.  
 - **Rules:**
-  - ✅ Allow inbound **5432 (PostgreSQL)** **only from `app-subnet-sg` (VMSS)**  
+  - ✅ Allow inbound **5432 (PostgreSQL)** **only from the IP range of `app-subnet-sg` **  
     - Source: IP Adresses
     - Source IP addresses/CIDR ranges: `10.0.2.0/24`
     - Source port ranges: *
@@ -127,6 +127,7 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
     - Priority: `1000`
     - Name: `allow-app-to-db-5432`
     - Description: `Allow PostgreSQL traffic from app-subnet (VMSS) only.`
+  - **Subnet Delegation**: `Microsoft.DBforPostgreSQL/flexibleServers`
 
 #### Application Subnet NSG (`app-subnet-sg`)
 - **Purpose:** Host Grafana VMSS and expose it securely.  
@@ -160,20 +161,6 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
     - Name: `allow-https-internet`  
     - Description: `Allow public secure (HTTPS) traffic to Grafana through the Load Balancer.`
 
-#### Bastion Subnet NSG (`bastion-subnet-sg`)
-- **Purpose:** Secure entry point for administrators using Azure Bastion.  
-- **Rules:**
-  - ✅ Allow inbound **443 (HTTPS)** from Internet  
-    - Source: Any  
-    - Source port ranges: *  
-    - Destination: Any  
-    - Service: HTTPS  
-    - Action: Allow  
-    - Priority: `1000`  
-    - Name: `allow-https-internet`  
-    - Description: `Allow HTTPS traffic from the Internet to Azure Bastion service.`  
-  - Azure Bastion tunnels these protocols internally, so they should remain closed externally.
-
 ### 5. Public IPs
 - Provision **Public IP addresses** for resources that require external access:
   - **Bastion** → Already provisioned automatically when creating Bastion (`vnet-grafana-bastion Public IP`). Used **only** for administrators via Azure Portal.
@@ -183,15 +170,16 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 - In the Azure Portal, go to **Create a resource** → Search for **Public IP Address**.
 - Fill in the details:
   - **Resource group**: Use the same RG as your Load Balancer.
+  - **Region**: `East US`
   - **Name**: `grafana-lb-ip`
   - **SKU**: Standard (recommended for production, supports availability zones).
-  - **Availability zone**: Zone-redundant
+  - **Availability zone**: 1
   - **IP address assignment**: Static (to keep the same IP for DNS).
   - **Tier**: Regional (default).
-  - **Region**: `East US`
+  - **Routing preference**: `Microsoft network`
+  - **Idle timeout (minutes)**: 4 (minutes)
   - **DNS name label**: `grafana-project-<your-name-here>`
 - Click **Review + Create** → **Create**.
-- Associate this Public IP with your Load Balancer frontend configuration later. FIXME
 
 ### 6. NAT Gateway (Outbound Internet)
 - Deploy an **Azure NAT Gateway** to allow outbound Internet connectivity for VMs in private subnets **without assigning public IPs** to each VM.
@@ -204,13 +192,14 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 - In the Azure Portal, go to **Create a resource** → Search for **NAT Gateway**.
 - Fill in the details:
   - **Resource group**: Same as your VNet/VMSS.
-  - **Name**: `nat-gateway-app`
+  - **Name**: `nat-gateway-grafana`
   - **Region**: Match the VNet region.
-  - **Public IP**: Assign `grafana-lb-ip`.
-  - **Idle timeout (minutes)**: Default (4) or adjust if your workloads need longer connections.
-  - Select **Virtual Network**: `vnet-grafana`
+  - **Availability zone**: `Zone 1`
+  - **TCP idle timeout (minutes)**: Default (4) or increase if workloads need longer connections.
+  - Under Outbound IP; **Public IP**: Create and assign a **new Public IP** (e.g., `nat-ip`).
+  - Under `Subnet` section; select **Virtual Network**: `vnet-grafana`
   - Select Subnet(s): `app-subnet`, optionally `db-subnet`.
-  - Click **Review + Create** → **Create**.
+SSH public key source
 
 ✅ This setup ensures:
 - **VMSS instances** in `app-subnet` can access the Internet (e.g., for OS updates, downloading Grafana plugins).
@@ -223,26 +212,88 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 
 Once networking is in place, we deploy compute, databases, and application services.
 
-### 1. Deploy Azure VM Scale Set (VMSS)
-- Create a **Linux-based VMSS** to host Grafana instances.
-- Use a custom `cloud-init` or provisioning script to install Grafana (see `cloud-init.yaml`).
-- Configure **autoscaling** rules via **Azure Monitor** (scale out on CPU/memory, scale in during low load).
-- Place VMSS in **app-subnet**.
+### 1. Deploy Azure VM Scale Set (VMSS) and Load Balancer
 
-### 2. Attach Load Balancer
-- Provision an **Azure Load Balancer**.
-- Configure:
-  - **Frontend IP** (public, with DNS label if needed).
-  - **Backend pool** (VMSS instances).
-  - **Health probes** (port 3000 for Grafana).
-  - **Load-balancing rules** for HTTP/HTTPS traffic.
-- Ensures high availability and seamless access to Grafana.
+> ⚠️ VMSS autoscaling requires the `Microsoft.Insights` resource provider to be registered in your subscription.  
+> If it’s not registered, you’ll see the error:  
+> *"Subscription needs Microsoft.Insights registration to use autoscaling."*
 
-### 3. Provision PostgreSQL Flexible Server
-- Deploy **Azure Database for PostgreSQL Flexible Server** in **db-subnet**.
-- Enable **VNet integration** to restrict access to internal VNets only.
-- Configure **firewall rules** and **admin credentials**.
-- Grafana will use this DB for dashboards, users, and data sources.
+#### 🔧 Register Microsoft.Insights in Azure Portal
+1. Go to **Azure Portal** → **Subscriptions** → Select your subscription.  
+2. In the left menu, select **Settings** --> **Resource providers**.  
+3. Search for **Microsoft.Insights**.  
+4. Click **Register**.  
+5. Wait a few seconds until the status shows **Registered**.  
+
+#### Steps to Create VMSS
+1. In the Azure Portal, go to **Create a resource** → Search for **Virtual machine scale set**.
+2. Fill in the basics:
+  - **Subscription**: Your active subscription.
+  - **Resource group**: Same as your VNet (e.g., `rg-grafana-prod`).
+  - **Name**: `grafana-vmss`.
+  - **Region**: Match your VNet region.
+  - **Availability zone**: `Zone 1`
+  - **Orchestration mode**: `Flexible`
+  - **Scaling**: Autoscaling
+    - Configure **Scaling** by editting default condition:
+      - Default instance count: 2
+      - Minimum: `1`
+      - Maximum: `3`
+      - Scaling policy:
+        - Scale out if **CPU > 80% increase 1**.
+        - Scale in if **CPU < 20% decrease 1**.
+    - **Query duration**: 5 (minutes ) 
+  - **Image**: Ubuntu Server 24.04 LTS x64.
+  - **Instance size**: Start with `Standard_B2ms` (2 vCPU, 8 GB RAM) and adjust as needed.
+  - **Authentication type**: `SSH public key`
+  - **Username**: `azureuser`
+  - **SSH public key source**: Generate a new SSH Public Key.
+  - Click **Review + Create** → **Create**.
+  - Download your **SSH public key**.
+3. Configure **Disks**:
+   - OS disk: `Standard SSD` (sufficient for Grafana).
+   - No additional data disks required.
+4. Configure **Networking**:
+  - **Virtual Network**: Select `vnet-grafana`.
+  - **Subnet**: Select `app-subnet`.
+  - **Load balancing**: Create a new **Azure Load Balancer** frontend with Public IP:
+    - **Name**: `grafana-lb`
+    - **Type**: `Public`
+    - **Protocol**: TCP
+    - **Rules**: `Load balancer rule`
+    - Configure **Frontend port**: 80
+    - **Backend port**: 3000
+    - Click **Create**.
+5. Configure **Management**:
+   - Enable **Boot diagnostics** with managed storage account (store logs in your diagnostics storage account).
+6. Add **cloud-init provisioning**:
+   - Under **Advanced → Custom data**, paste your `cloud-init.yaml` file to automatically install and configure Grafana on VM startup.
+7.  Review and click **Download Private Key and Create Resource**.
+
+✅ After deployment:
+- VMSS instances will join the backend pool of your Load Balancer.
+- Grafana will be available via the LB’s Public IP or DNS.
+- VMSS will scale automatically based on workload.
+
+### 2. Provision PostgreSQL Flexible Server
+- In the Azure Portal, go to **Create a resource** → Search for **Azure Database for PostgreSQL Flexible Server**.
+- Fill in the basics:
+  - **Resource group**: Use the same as your project (e.g., `rg-grafana-prod`).
+  - **Server name**: Unique name (e.g., `grafana-db-server`).
+  - **Region**: Match your VNet region.
+  - **PostgreSQL version**: 17
+  - **Workload type**: Development
+- **Authentication**:
+  - **Authentication method**: `PostgreSQL authentication only` 
+  - Admin username: e.g., `pgadmin`
+  - Admin password: `ip5(B60z3!hr`
+- **Networking**:
+  - Connectivity method: **Private access (VNet Integration)**  
+  - Virtual network: `vnet-grafana`
+  - Subnet: `db-subnet`
+- **Review + Create** → Deploy the server.
+- After deployment:
+  - Confirm that the **NSG on db-subnet** only allows **5432 inbound** from `app-subnet`.
 
 ### 4. Configure Grafana Installation
 - Use `cloud-init` to:
@@ -283,9 +334,8 @@ This avoids exposing **SSH (22)** to the Internet.
 ### 1. SSH via Azure Portal (Browser-Based)
 1. Navigate to the VM or VMSS instance in the **Azure Portal**.
 2. Click **Connect → Bastion**.
-3. Enter your admin username and private key / password.
+3. Enter your admin username `azureuser` and select private key / password.
 4. An **SSH session opens directly in your browser**, tunneled over HTTPS (443).
-
 - Bastion connects to the VM’s **private IP on port 22**.
 - No public IPs are required on the VMs.
 
