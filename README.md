@@ -1,9 +1,10 @@
-# 🚀 Project-401: Grafana Service deployed on Azure VMSS connected to a Load Balancer, PostgreSQL Flexible DB, VNet Components, Azure DNS, NAT Gateway, Bastion, Storage Account, and Azure Monitor using Azure Entra ID to manage identities.
+# 🚀 Project-401: Grafana Service deployed on Azure VMSS connected to a Load Balancer, PostgreSQL Flexible DB, VNet Components, Azure DNS, NAT Gateway, Bastion, Storage Account, Azure Monitor and Azure Entra ID to manage identities.
 
 ## 🔧 Prerequisites
 - Azure CLI installed and logged in (`az login`)
 - An active Azure subscription
 - Sufficient IAM permissions: Contributor + User Access Administrator
+- A domain name
 
 ## 🎯 Description
 This project demonstrates how to deliver **Grafana as a Service** deployed on Azure.  
@@ -119,7 +120,7 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 - **Rules:**
   - ✅ Allow inbound **5432 (PostgreSQL)** **only from the IP range of `app-subnet-sg` **  
     - Source: IP Adresses
-      - Source IP addresses/CIDR ranges: `10.0.2.0/24`
+    - Source IP addresses/CIDR ranges: `10.0.2.0/24`
     - Source port ranges: *
     - Destination: Any
     - Service: PostgreSQL
@@ -133,7 +134,7 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 - **Rules:**
   - ✅ Allow inbound **22 (SSH)** **only from Bastion subnet (`10.0.1.0/26`)**  
     - Source: IP Addresses  
-      - Source IP addresses/CIDR ranges: `10.0.1.0/26`  
+    - Source IP addresses/CIDR ranges: `10.0.1.0/26`  
     - Source port ranges: *  
     - Destination: Any  
     - Service: SSH  
@@ -160,32 +161,9 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
     - Name: `allow-https-internet`  
     - Description: `Allow public secure (HTTPS) traffic to Grafana through the Load Balancer.`
 
-<!-- ### 5. Public IPs
-- Provision **Public IP addresses** for resources that require external access:
-  - **Bastion** → Already provisioned automatically when creating Bastion (`grafana-vnet-bastion Public IP`). Used **only** for administrators via Azure Portal.
-  - **Load Balancer frontend** → Requires a **static Public IP** to serve Grafana traffic to end-users.
-
-#### Steps to Create a Public IP (for Load Balancer frontend)
-- In the Azure Portal, go to **Create a resource** → Search for **Public IP Address**.
-- Fill in the details:
-  - **Resource group**: `grafana-rg`
-  - **Region**: `East US`
-  - **Name**: `grafana-agw-ip`
-  - **IP Version**: `IPv4`
-  - **SKU**: Standard (recommended for production, supports availability zones).
-  - **Availability zone**: 1
-  - **IP address assignment**: Static (to keep the same IP for DNS).
-  - **Tier**: `Regional` (default).
-  - **Routing preference**: `Microsoft network`
-  - **Idle timeout (minutes)**: `4` (minutes)
-  - **DNS name label**: `grafana-project-<your-name-here>`
-- Click **Review + Create** → **Create**. -->
-
-### 6. NAT Gateway (Outbound Internet)
+### 5. NAT Gateway (Outbound Internet)
 - Deploy an **Azure NAT Gateway** to allow outbound Internet connectivity for VMs in private subnets without assigning public IPs to each VM.
-- Associate the NAT Gateway with:
-  - **app-subnet** → Required for VMSS (Grafana servers) to download updates and connect to external services.
-  - **db-subnet** (optional) → If PostgreSQL server requires outbound patching or updates.
+- Associate the NAT Gateway with **app-subnet** → Required for VMSS (Grafana servers) to download updates and connect to external services.
 - Ensures only initiated connections go out, blocking unsolicited inbound traffic by default.
 
 #### Steps to Create a NAT Gateway
@@ -198,7 +176,7 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
   - **TCP idle timeout (minutes)**: `4` (Default) or increase if workloads need longer connections.
   - Under Outbound IP; **Public IP**: Create and assign a **new Public IP** (e.g., `nat-ip`).
   - Under `Subnet` section; select **Virtual Network**: `grafana-vnet`
-  - Select Subnet(s): `app-subnet`, optionally `db-subnet`.
+  - Select Subnet(s): `app-subnet`.
 
 ✅ This setup ensures:
 - **VMSS instances** in `app-subnet` can access the Internet (e.g., for OS updates, downloading Grafana plugins).
@@ -249,7 +227,6 @@ Once networking is in place, we deploy compute, databases, and application servi
   - **SSH public key source**: Generate a new SSH Public Key.
 3. Configure **Disks**:
   - OS disk: `Standard SSD` (sufficient for Grafana).
-  - No additional data disks required.
 4. Configure **Networking**:
   - **Virtual Network**: Select `grafana-vnet`.
   - **Subnet**: Select `app-subnet`.
@@ -277,16 +254,14 @@ Once networking is in place, we deploy compute, databases, and application servi
 - Grafana will be available via the LB’s Public IP or DNS.
 - VMSS will scale automatically based on workload.
 
+9. Navigate to the IP address of Application Gateway `grafana-agw-publicip`:
+- **Configuration**: Add `DNS name label` as `grafana-project-<your-name-here>`
+- Save.
+
 ```bash
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout grafana.key -out grafana.crt \
-  -subj "//CN=grafana.local"  # the first / is to escape, only for windows os and bash
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout grafana.key -out grafana.crt -subj "//CN=grafana.clarusway.us"  # the first / is to escape, only for windows os and bash
 
 openssl pkcs12 -export -out grafana.pfx -inkey grafana.key -in grafana.crt
-
-
-sudo certbot certonly --standalone -d grafana-project-rafe.eastus.cloudapp.azure.com --email stefanorafe@gmail.com --agree-tos
-
 ```
 
 ### 2. Provision PostgreSQL Flexible Server
