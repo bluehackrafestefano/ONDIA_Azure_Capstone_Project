@@ -78,7 +78,7 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 
 ### 1. Create Resource Group
 - Create a **resource group** to contain all project resources (VNet, subnets, NSGs, NAT, Bastion, etc.).
-- Use meaningful naming (e.g. `rg-grafana-prod`) to reflect purpose and lifecycle.
+- Use meaningful naming (e.g. `grafana-rg`) to reflect purpose and lifecycle.
 - Keep `East US` as the region. 
 - Click Create.
 
@@ -160,7 +160,7 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
     - Name: `allow-https-internet`  
     - Description: `Allow public secure (HTTPS) traffic to Grafana through the Load Balancer.`
 
-### 5. Public IPs
+<!-- ### 5. Public IPs
 - Provision **Public IP addresses** for resources that require external access:
   - **Bastion** → Already provisioned automatically when creating Bastion (`vnet-grafana-bastion Public IP`). Used **only** for administrators via Azure Portal.
   - **Load Balancer frontend** → Requires a **static Public IP** to serve Grafana traffic to end-users.
@@ -168,9 +168,9 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 #### Steps to Create a Public IP (for Load Balancer frontend)
 - In the Azure Portal, go to **Create a resource** → Search for **Public IP Address**.
 - Fill in the details:
-  - **Resource group**: `rg-grafana-prod`
+  - **Resource group**: `grafana-rg`
   - **Region**: `East US`
-  - **Name**: `grafana-lb-ip`
+  - **Name**: `grafana-agw-ip`
   - **IP Version**: `IPv4`
   - **SKU**: Standard (recommended for production, supports availability zones).
   - **Availability zone**: 1
@@ -179,7 +179,7 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
   - **Routing preference**: `Microsoft network`
   - **Idle timeout (minutes)**: `4` (minutes)
   - **DNS name label**: `grafana-project-<your-name-here>`
-- Click **Review + Create** → **Create**.
+- Click **Review + Create** → **Create**. -->
 
 ### 6. NAT Gateway (Outbound Internet)
 - Deploy an **Azure NAT Gateway** to allow outbound Internet connectivity for VMs in private subnets without assigning public IPs to each VM.
@@ -191,7 +191,7 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 #### Steps to Create a NAT Gateway
 - In the Azure Portal, go to **Create a resource** → Search for **NAT Gateway**.
 - Fill in the details:
-  - **Resource group**: `rg-grafana-prod`
+  - **Resource group**: `grafana-rg`
   - **Name**: `nat-gateway-grafana`
   - **Region**: Match the VNet region.
   - **Availability zone**: `Zone 1`
@@ -228,7 +228,7 @@ Once networking is in place, we deploy compute, databases, and application servi
 1. In the Azure Portal, go to **Create a resource** → Search for **Virtual machine scale set**.
 2. Fill in the basics:
   - **Subscription**: Your active subscription.
-  - **Resource group**: `rg-grafana-prod`
+  - **Resource group**: `grafana-rg`
   - **Name**: `grafana-vmss`.
   - **Region**: Match your VNet region.
   - **Availability zone**: `Zone 1`
@@ -256,9 +256,10 @@ Once networking is in place, we deploy compute, databases, and application servi
   - **Load balancing**: Create a new **Application gateway** frontend with Public IP:
     - **Name**: `grafana-agw`
     - **Type**: `Public only`
+      - **Rule name**: `HTTP`
     - **Protocol**: HTTP
     - **Rules**: `HTTP`
-    - **Port**: `3000`
+    - **Port**: `80`
     - Click **Create**.
 5. Configure **Management**:
    - Enable **Boot diagnostics** with managed storage account (store logs in your diagnostics storage account).
@@ -282,7 +283,7 @@ openssl pkcs12 -export -out grafana.pfx -inkey grafana.key -in grafana.crt
 ### 2. Provision PostgreSQL Flexible Server
 - In the Azure Portal, go to **Create a resource** → Search for **Azure Database for PostgreSQL Flexible Server**.
 - Fill in the basics:
-  - **Resource group**: Use the same as your project (e.g., `rg-grafana-prod`).
+  - **Resource group**: Use the same as your project (e.g., `grafana-rg`).
   - **Server name**: Unique name (e.g., `grafana-db-server`).
   - **Region**: Match your VNet region.
   - **PostgreSQL version**: 17
