@@ -254,7 +254,7 @@ Once networking is in place, we deploy compute, databases, and application servi
   - **Virtual Network**: Select `vnet-grafana`.
   - **Subnet**: Select `app-subnet`.
   - **Load balancing**: Create a new **Application gateway** frontend with Public IP:
-    - **Name**: `grafana-lb`
+    - **Name**: `grafana-agw`
     - **Type**: `Public only`
     - **Protocol**: HTTP
     - **Rules**: `HTTP`
