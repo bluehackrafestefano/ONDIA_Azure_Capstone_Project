@@ -97,13 +97,13 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 - Delete the default Subnet.
 - See the Bastion Subnet is already created here.
 - Create the subnets to segment the VNet into subnets for different tiers.
-- Keep `Subnet purpose` as `Default`
+- Keep **Subnet purpose** as `Default`
 - Assign names and IP ranges as below.
 
 | Subnet Name     | Purpose                                  | Range | Feature |
 |-----------------|------------------------------------------|-------|---------|
 | **app-subnet**  | Hosts Grafana VMSS and related services  | 10.0.2.0/24 | |
-| **db-subnet**   | Contains the PostgreSQL Flexible Server  | 10.0.3.0/24 | Enable private subnet |
+| **db-subnet**   | Contains the PostgreSQL Flexible Server  | 10.0.3.0/24 | - Enable private subnet - **Subnet Delegation**: `Microsoft.DBforPostgreSQL/flexibleServers` |
 
 - Ensure each subnet’s prefix is non-overlapping and sized appropriately.
 
@@ -119,15 +119,14 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 - **Rules:**
   - ✅ Allow inbound **5432 (PostgreSQL)** **only from the IP range of `app-subnet-sg` **  
     - Source: IP Adresses
-    - Source IP addresses/CIDR ranges: `10.0.2.0/24`
+      - Source IP addresses/CIDR ranges: `10.0.2.0/24`
     - Source port ranges: *
     - Destination: Any
     - Service: PostgreSQL
     - Action: Allow
     - Priority: `1000`
     - Name: `allow-app-to-db-5432`
-    - Description: `Allow PostgreSQL traffic from app-subnet (VMSS) only.`
-  - **Subnet Delegation**: `Microsoft.DBforPostgreSQL/flexibleServers`
+    - Description: `Allow PostgreSQL traffic from app-subnet (VMSS).`
 
 #### Application Subnet NSG (`app-subnet-sg`)
 - **Purpose:** Host Grafana VMSS and expose it securely.  
@@ -169,20 +168,21 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 #### Steps to Create a Public IP (for Load Balancer frontend)
 - In the Azure Portal, go to **Create a resource** → Search for **Public IP Address**.
 - Fill in the details:
-  - **Resource group**: Use the same RG as your Load Balancer.
+  - **Resource group**: `rg-grafana-prod`
   - **Region**: `East US`
   - **Name**: `grafana-lb-ip`
+  - **IP Version**: `IPv4`
   - **SKU**: Standard (recommended for production, supports availability zones).
   - **Availability zone**: 1
   - **IP address assignment**: Static (to keep the same IP for DNS).
-  - **Tier**: Regional (default).
+  - **Tier**: `Regional` (default).
   - **Routing preference**: `Microsoft network`
-  - **Idle timeout (minutes)**: 4 (minutes)
+  - **Idle timeout (minutes)**: `4` (minutes)
   - **DNS name label**: `grafana-project-<your-name-here>`
 - Click **Review + Create** → **Create**.
 
 ### 6. NAT Gateway (Outbound Internet)
-- Deploy an **Azure NAT Gateway** to allow outbound Internet connectivity for VMs in private subnets **without assigning public IPs** to each VM.
+- Deploy an **Azure NAT Gateway** to allow outbound Internet connectivity for VMs in private subnets without assigning public IPs to each VM.
 - Associate the NAT Gateway with:
   - **app-subnet** → Required for VMSS (Grafana servers) to download updates and connect to external services.
   - **db-subnet** (optional) → If PostgreSQL server requires outbound patching or updates.
@@ -191,15 +191,14 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 #### Steps to Create a NAT Gateway
 - In the Azure Portal, go to **Create a resource** → Search for **NAT Gateway**.
 - Fill in the details:
-  - **Resource group**: Same as your VNet/VMSS.
+  - **Resource group**: `rg-grafana-prod`
   - **Name**: `nat-gateway-grafana`
   - **Region**: Match the VNet region.
   - **Availability zone**: `Zone 1`
-  - **TCP idle timeout (minutes)**: Default (4) or increase if workloads need longer connections.
+  - **TCP idle timeout (minutes)**: `4` (Default) or increase if workloads need longer connections.
   - Under Outbound IP; **Public IP**: Create and assign a **new Public IP** (e.g., `nat-ip`).
   - Under `Subnet` section; select **Virtual Network**: `vnet-grafana`
   - Select Subnet(s): `app-subnet`, optionally `db-subnet`.
-SSH public key source
 
 ✅ This setup ensures:
 - **VMSS instances** in `app-subnet` can access the Internet (e.g., for OS updates, downloading Grafana plugins).
@@ -229,7 +228,7 @@ Once networking is in place, we deploy compute, databases, and application servi
 1. In the Azure Portal, go to **Create a resource** → Search for **Virtual machine scale set**.
 2. Fill in the basics:
   - **Subscription**: Your active subscription.
-  - **Resource group**: Same as your VNet (e.g., `rg-grafana-prod`).
+  - **Resource group**: `rg-grafana-prod`
   - **Name**: `grafana-vmss`.
   - **Region**: Match your VNet region.
   - **Availability zone**: `Zone 1`
@@ -244,25 +243,22 @@ Once networking is in place, we deploy compute, databases, and application servi
         - Scale in if **CPU < 20% decrease 1**.
     - **Query duration**: 5 (minutes ) 
   - **Image**: Ubuntu Server 24.04 LTS x64.
-  - **Instance size**: Start with `Standard_B2ms` (2 vCPU, 8 GB RAM) and adjust as needed.
+  - **Instance size**: Start with `Standard D2s v3` (2 vCPU, 8 GB RAM) and adjust as needed.
   - **Authentication type**: `SSH public key`
   - **Username**: `azureuser`
   - **SSH public key source**: Generate a new SSH Public Key.
-  - Click **Review + Create** → **Create**.
-  - Download your **SSH public key**.
 3. Configure **Disks**:
    - OS disk: `Standard SSD` (sufficient for Grafana).
    - No additional data disks required.
 4. Configure **Networking**:
   - **Virtual Network**: Select `vnet-grafana`.
   - **Subnet**: Select `app-subnet`.
-  - **Load balancing**: Create a new **Azure Load Balancer** frontend with Public IP:
+  - **Load balancing**: Create a new **Application gateway** frontend with Public IP:
     - **Name**: `grafana-lb`
-    - **Type**: `Public`
-    - **Protocol**: TCP
-    - **Rules**: `Load balancer rule`
-    - Configure **Frontend port**: 80
-    - **Backend port**: 3000
+    - **Type**: `Public only`
+    - **Protocol**: HTTP
+    - **Rules**: `HTTP`
+    - **Port**: `3000`
     - Click **Create**.
 5. Configure **Management**:
    - Enable **Boot diagnostics** with managed storage account (store logs in your diagnostics storage account).
@@ -295,31 +291,73 @@ Once networking is in place, we deploy compute, databases, and application servi
 - After deployment:
   - Confirm that the **NSG on db-subnet** only allows **5432 inbound** from `app-subnet`.
 
-### 4. Configure Grafana Installation
-- Use `cloud-init` to:
-  - Install Grafana OSS from the official APT repo.
-  - Enable and start `grafana-server` service.
-- Optionally, pre-provision:
-  - **Data sources** (PostgreSQL, Azure Monitor).
-  - **Dashboards** via `/etc/grafana/provisioning/`.
+### 3. Integrate Grafana with Azure Entra ID (SSO)
 
-### 5. Integrate with Azure Entra ID
-- Register **Grafana app** in Entra ID.
-- Configure OAuth2 settings in Grafana (`grafana.ini`).
-- Grant necessary permissions (profile, openid, email).
-- Enables **SSO** for enterprise users.
+To provide **Single Sign-On (SSO)** with your corporate Microsoft Entra ID (formerly Azure AD), configure Grafana to authenticate via OAuth2.
 
-### 6. Storage Integration
+#### 1. Register Grafana as an App in Entra ID
+1. In the Azure Portal, go to **Microsoft Entra ID** → **App registrations** → **New registration**.  
+2. Fill in:
+   - **Name**: `grafana-app`
+   - **Supported account types**: `Accounts in this organizational directory only`
+   - **Select a platform**: `Web`
+   - **Redirect URI**: `https://<your-grafana-dns>/login/azuread` (set after DNS is ready)
+3. Click **Register**.
+
+#### 2. Configure Authentication Settings
+1. Open the new app → **Authentication**.  
+2. Add:
+   - **Logout URI**: `https://<your-grafana-dns>/logout`
+3. Enable **ID tokens** under *Implicit grant and hybrid flows*.  
+4. Save.
+
+#### 3. Create a Client Secret
+1. Go to **Certificates & secrets** → **New client secret**.  
+2. **Description**: `Grafana client secret`
+3. **Expires**: 6 months
+4. Copy the **secret value** (you will need this in Grafana).
+
+#### 4. Collect Required IDs
+From the **Overview** page of the app, note:
+- **Application (client) ID**
+- **Directory (tenant) ID**
+
+#### 5. Configure Grafana
+On your Grafana VMSS instances, edit `/etc/grafana/grafana.ini`:
+
+```ini
+[auth.azuread]
+name = AzureAD
+enabled = true
+allow_sign_up = true
+client_id = <Application (client) ID>
+client_secret = <Client Secret>
+scopes = openid email profile
+auth_url = https://login.microsoftonline.com/<Tenant ID>/oauth2/v2.0/authorize
+token_url = https://login.microsoftonline.com/<Tenant ID>/oauth2/v2.0/token
+
+- Then restart Grafana to apply the changes:
+```bash
+sudo systemctl restart grafana-server
+```
+### ✅ Verification
+1. Open your browser and navigate to Grafana:  
+   `https://<your-grafana-dns>`  
+2. On the login page, confirm that you now see a **"Sign in with Microsoft"** button.  
+3. Log in using an account from your Azure Entra ID tenant.  
+4. If successful, you’ll be redirected into Grafana with your Entra ID user identity. 
+
+### 4. Storage Integration
 - Connect VMSS diagnostic logs and Grafana logs to **Azure Storage Account**.
 - Optionally send logs to **Log Analytics** for centralized monitoring.
 
-### 7. Monitoring & Autoscale
+### 5. Monitoring & Autoscale
 - Enable **Azure Monitor** for VMSS, PostgreSQL, and Grafana metrics.
 - Configure **alerts** (e.g., CPU > 70%).
 - Define **autoscale rules** (e.g., scale out when CPU > 70%, scale in when < 30%).
 - Create **dashboards** for end-to-end observability.
 
-### 8. Azure DNS Integration
+### 6. Azure DNS Integration
 - Create a DNS zone (e.g. `grafana.example.com`).
 - Map Load Balancer’s public IP to a friendly domain.
 - Users access Grafana securely via FQDN.

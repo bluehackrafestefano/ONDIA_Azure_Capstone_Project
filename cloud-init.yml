@@ -5,11 +5,33 @@ runcmd:
   - wget -q -O - https://packages.grafana.com/gpg.key | sudo apt-key add -
   - echo "deb https://packages.grafana.com/oss/deb stable main" | sudo tee /etc/apt/sources.list.d/grafana.list
 
-  # Update packages and install Grafana OSS
+  # Update packages and install Grafana OSS + Nginx
   - apt-get update -y
-  - apt-get install -y grafana
+  - apt-get install -y grafana nginx
 
   # Enable and start Grafana service
   - systemctl daemon-reload
   - systemctl enable grafana-server
   - systemctl start grafana-server
+
+  # Configure Nginx as reverse proxy to Grafana
+  - rm -f /etc/nginx/sites-enabled/default
+  - |
+    cat <<EOF > /etc/nginx/sites-available/grafana
+    server {
+      listen 80;
+      server_name _;
+
+      location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+      }
+    }
+    EOF
+  - ln -s /etc/nginx/sites-available/grafana /etc/nginx/sites-enabled/grafana
+  - nginx -t
+  - systemctl restart nginx
+  - systemctl enable nginx
