@@ -84,7 +84,7 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 
 ### 2. Provision Virtual Network (VNet) and Bastion
 - Select the related subscription and the resource group.
-- Create an Azure **Virtual Network** for the project (e.g. `vnet-grafana`).
+- Create an Azure **Virtual Network** for the project (e.g. `grafana-vnet`).
 - Under IP Adresses tab, define an appropriate address space (e.g. `10.0.0.0/16`).
 - Under Security tab, select `Enable Azure Bastion` option.
 - This VNet will host subnets such as application, database, bastion, etc.
@@ -133,7 +133,7 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 - **Rules:**
   - ✅ Allow inbound **22 (SSH)** **only from Bastion subnet (`10.0.1.0/26`)**  
     - Source: IP Addresses  
-    - Source IP addresses/CIDR ranges: `10.0.1.0/26`  
+      - Source IP addresses/CIDR ranges: `10.0.1.0/26`  
     - Source port ranges: *  
     - Destination: Any  
     - Service: SSH  
@@ -144,7 +144,7 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
   - ✅ Allow inbound **80 (HTTP)** from Internet  
     - Source: Any  
     - Source port ranges: *  
-    - Destination: Any  
+    - Destination: Any
     - Service: HTTP  
     - Action: Allow  
     - Priority: `1010`  
@@ -162,7 +162,7 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 
 <!-- ### 5. Public IPs
 - Provision **Public IP addresses** for resources that require external access:
-  - **Bastion** → Already provisioned automatically when creating Bastion (`vnet-grafana-bastion Public IP`). Used **only** for administrators via Azure Portal.
+  - **Bastion** → Already provisioned automatically when creating Bastion (`grafana-vnet-bastion Public IP`). Used **only** for administrators via Azure Portal.
   - **Load Balancer frontend** → Requires a **static Public IP** to serve Grafana traffic to end-users.
 
 #### Steps to Create a Public IP (for Load Balancer frontend)
@@ -192,12 +192,12 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 - In the Azure Portal, go to **Create a resource** → Search for **NAT Gateway**.
 - Fill in the details:
   - **Resource group**: `grafana-rg`
-  - **Name**: `nat-gateway-grafana`
+  - **Name**: `grafana-nat`
   - **Region**: Match the VNet region.
   - **Availability zone**: `Zone 1`
   - **TCP idle timeout (minutes)**: `4` (Default) or increase if workloads need longer connections.
   - Under Outbound IP; **Public IP**: Create and assign a **new Public IP** (e.g., `nat-ip`).
-  - Under `Subnet` section; select **Virtual Network**: `vnet-grafana`
+  - Under `Subnet` section; select **Virtual Network**: `grafana-vnet`
   - Select Subnet(s): `app-subnet`, optionally `db-subnet`.
 
 ✅ This setup ensures:
@@ -210,94 +210,6 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 ## 🖥️ Project Setup: Compute & Application Components
 
 Once networking is in place, we deploy compute, databases, and application services.
-
-# 🚀 Deploy Application Gateway with HTTP (80) & HTTPS (443) for Grafana
-
-This guide shows how to create an **Azure Application Gateway** (`grafana-agw`) with **HTTP → HTTPS redirection** and backend forwarding to a VMSS running Grafana behind Nginx.
-
----
-
-## 1. Create Application Gateway
-
-1. In **Azure Portal** → **Create a resource** → **Networking** → **Application Gateway**.  
-2. **Basics**:  
-   - Resource Group: `grafana-rg`  
-   - Name: `grafana-agw`  
-   - Region: `East US` (same as VMSS)  
-   - Tier: `Standard_v2`  
-   - Instance count: `2` (minimum recommended)  
-   - SKU size: `Small` (or higher if needed)  
-   - Availability zone: Default  
-
-3. **Frontend IP**:  
-   - Type: **Public only**  
-   - Public IP name: `grafana-agw-pip`  
-
----
-
-## 2. Configure Listeners
-
-### HTTP Listener (80)
-- Name: `listener-http`  
-- Protocol: `HTTP`  
-- Port: `80`  
-- Frontend IP: `grafana-agw-pip`  
-
-### HTTPS Listener (443)
-- Name: `listener-https`  
-- Protocol: `HTTPS`  
-- Port: `443`  
-- Frontend IP: `grafana-agw-pip`  
-- Certificate: Upload your **PFX certificate** (from Let’s Encrypt or self-signed).  
-
----
-
-## 3. Configure Backend Pool
-
-- Backend pool → add **VMSS** running Grafana (or backend NICs).  
-- Example: `grafana-vmss-pool`  
-
----
-
-## 4. Configure Backend Settings
-
-- Name: `backend-http-3000`  
-- Protocol: `HTTP`  
-- Port: `80` (because Nginx proxies 80 → 3000 inside VM)  
-- Affinity: Disabled  
-- Connection draining: Disabled  
-
----
-
-## 5. Configure Routing Rules
-
-### Rule 1: Redirect HTTP → HTTPS
-- Rule name: `http-to-https`  
-- Listener: `listener-http`  
-- Action type: **Redirect**  
-- Redirect target: `listener-https`  
-- Redirect type: **Permanent**  
-
-### Rule 2: HTTPS → Backend
-- Rule name: `https-to-backend`  
-- Listener: `listener-https`  
-- Backend pool: `grafana-vmss-pool`  
-- Backend settings: `backend-http-3000`  
-
----
-
-## 6. Deploy
-
-- Review → Create  
-- After deployment:  
-  - `http://grafana.clarusway.us` → **redirects to** `https://grafana.clarusway.us`  
-  - `https://grafana.clarusway.us` → **forwards to** Grafana on VMSS via Nginx  
-
----
-
-✅ Done — you now have a secure Application Gateway in front of Grafana!
-
-
 
 ### 1. Deploy Azure VM Scale Set (VMSS)
 
@@ -336,17 +248,29 @@ This guide shows how to create an **Azure Application Gateway** (`grafana-agw`) 
   - **Username**: `azureuser`
   - **SSH public key source**: Generate a new SSH Public Key.
 3. Configure **Disks**:
-   - OS disk: `Standard SSD` (sufficient for Grafana).
-   - No additional data disks required.
+  - OS disk: `Standard SSD` (sufficient for Grafana).
+  - No additional data disks required.
 4. Configure **Networking**:
-  - **Virtual Network**: Select `vnet-grafana`.
+  - **Virtual Network**: Select `grafana-vnet`.
   - **Subnet**: Select `app-subnet`.
-
+  - **Load balancing**: Create a new **Application gateway** frontend with Public IP:
+    - **Name**: `grafana-agw`
+    - **Type**: `Public only`
+    - **Rule name**: `HTTP`
+    - **Protocol**: HTTP
+    - **Rules**: `HTTP`
+    - **Port**: `80`
+    - Click **Create**.
 5. Configure **Management**:
-   - Enable **Boot diagnostics** with managed storage account (store logs in your diagnostics storage account).
-6. Add **cloud-init provisioning**:
-   - Under **Advanced → Custom data**, paste your `cloud-init.yaml` file to automatically install and configure Grafana on VM startup.
-7.  Review and click **Download Private Key and Create Resource**.
+  - Enable **Boot diagnostics** with managed storage account (store logs in your diagnostics storage account).
+6. Under **Health**
+  - Enable application health monitoring --> Configure
+  - Port: 80
+  - Request path: `/api/health`
+  - Save
+7. Add **cloud-init provisioning**:
+  - Under **Advanced → Custom data**, paste your `cloud-init.yaml` file to automatically install and configure Grafana on VM startup.
+8.  Review and click **Download Private Key and Create Resource**.
 
 ✅ After deployment:
 - VMSS instances will join the backend pool of your Load Balancer.
@@ -379,11 +303,68 @@ sudo certbot certonly --standalone -d grafana-project-rafe.eastus.cloudapp.azure
   - Admin password: `ip5(B60z3!hr`
 - **Networking**:
   - Connectivity method: **Private access (VNet Integration)**  
-  - Virtual network: `vnet-grafana`
+  - Virtual network: `grafana-vnet`
   - Subnet: `db-subnet`
 - **Review + Create** → Deploy the server.
 - After deployment:
   - Confirm that the **NSG on db-subnet** only allows **5432 inbound** from `app-subnet`.
+
+
+# 📦 Create `grafana` Database on PostgreSQL Flexible Server
+
+## 1. Connect to your VMSS via Bastion
+- In **Azure Portal**, navigate to:
+  - **VM Scale Set → Instances → Connect → Bastion**  
+- Log in as `azureuser` (or your VM admin username).  
+
+---
+
+## 2. Install PostgreSQL Client
+Run the following on your VMSS instance:
+
+```bash
+sudo apt update
+sudo apt install postgresql-client -y
+```
+
+---
+
+## 3. Connect to PostgreSQL Flexible Server
+Use the `psql` client to connect. Replace placeholders:
+
+```bash
+psql -h <your-db-name>.postgres.database.azure.com \
+    -U <db-username>@<your-db-name> \
+    -d postgres \
+    -p 5432
+```
+
+### Example
+```bash
+psql -h grafana-db-server.postgres.database.azure.com \
+    -U pgadmin@grafana-db-server \
+    -d postgres \
+    -p 5432
+```
+
+You’ll be prompted for the PostgreSQL password.
+
+---
+
+## 4. Create Database `grafana`
+Inside the `psql` shell:
+
+```sql
+CREATE DATABASE grafana;
+\l   -- list all databases
+```
+
+You should now see `grafana` in the list.
+
+---
+
+✅ Your PostgreSQL Flexible Server now has a `grafana` database ready for Grafana to use.
+
 
 ### 3. Integrate Grafana with Azure Entra ID (SSO)
 
