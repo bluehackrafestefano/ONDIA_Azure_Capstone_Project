@@ -211,7 +211,95 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 
 Once networking is in place, we deploy compute, databases, and application services.
 
-### 1. Deploy Azure VM Scale Set (VMSS) and Application Gateway
+# 🚀 Deploy Application Gateway with HTTP (80) & HTTPS (443) for Grafana
+
+This guide shows how to create an **Azure Application Gateway** (`grafana-agw`) with **HTTP → HTTPS redirection** and backend forwarding to a VMSS running Grafana behind Nginx.
+
+---
+
+## 1. Create Application Gateway
+
+1. In **Azure Portal** → **Create a resource** → **Networking** → **Application Gateway**.  
+2. **Basics**:  
+   - Resource Group: `grafana-rg`  
+   - Name: `grafana-agw`  
+   - Region: `East US` (same as VMSS)  
+   - Tier: `Standard_v2`  
+   - Instance count: `2` (minimum recommended)  
+   - SKU size: `Small` (or higher if needed)  
+   - Availability zone: Default  
+
+3. **Frontend IP**:  
+   - Type: **Public only**  
+   - Public IP name: `grafana-agw-pip`  
+
+---
+
+## 2. Configure Listeners
+
+### HTTP Listener (80)
+- Name: `listener-http`  
+- Protocol: `HTTP`  
+- Port: `80`  
+- Frontend IP: `grafana-agw-pip`  
+
+### HTTPS Listener (443)
+- Name: `listener-https`  
+- Protocol: `HTTPS`  
+- Port: `443`  
+- Frontend IP: `grafana-agw-pip`  
+- Certificate: Upload your **PFX certificate** (from Let’s Encrypt or self-signed).  
+
+---
+
+## 3. Configure Backend Pool
+
+- Backend pool → add **VMSS** running Grafana (or backend NICs).  
+- Example: `grafana-vmss-pool`  
+
+---
+
+## 4. Configure Backend Settings
+
+- Name: `backend-http-3000`  
+- Protocol: `HTTP`  
+- Port: `80` (because Nginx proxies 80 → 3000 inside VM)  
+- Affinity: Disabled  
+- Connection draining: Disabled  
+
+---
+
+## 5. Configure Routing Rules
+
+### Rule 1: Redirect HTTP → HTTPS
+- Rule name: `http-to-https`  
+- Listener: `listener-http`  
+- Action type: **Redirect**  
+- Redirect target: `listener-https`  
+- Redirect type: **Permanent**  
+
+### Rule 2: HTTPS → Backend
+- Rule name: `https-to-backend`  
+- Listener: `listener-https`  
+- Backend pool: `grafana-vmss-pool`  
+- Backend settings: `backend-http-3000`  
+
+---
+
+## 6. Deploy
+
+- Review → Create  
+- After deployment:  
+  - `http://grafana.clarusway.us` → **redirects to** `https://grafana.clarusway.us`  
+  - `https://grafana.clarusway.us` → **forwards to** Grafana on VMSS via Nginx  
+
+---
+
+✅ Done — you now have a secure Application Gateway in front of Grafana!
+
+
+
+### 1. Deploy Azure VM Scale Set (VMSS)
 
 > ⚠️ VMSS autoscaling requires the `Microsoft.Insights` resource provider to be registered in your subscription.  
 > If it’s not registered, you’ll see the error:  
@@ -253,14 +341,7 @@ Once networking is in place, we deploy compute, databases, and application servi
 4. Configure **Networking**:
   - **Virtual Network**: Select `vnet-grafana`.
   - **Subnet**: Select `app-subnet`.
-  - **Load balancing**: Create a new **Application gateway** frontend with Public IP:
-    - **Name**: `grafana-agw`
-    - **Type**: `Public only`
-      - **Rule name**: `HTTP`
-    - **Protocol**: HTTP
-    - **Rules**: `HTTP`
-    - **Port**: `80`
-    - Click **Create**.
+
 5. Configure **Management**:
    - Enable **Boot diagnostics** with managed storage account (store logs in your diagnostics storage account).
 6. Add **cloud-init provisioning**:
@@ -278,6 +359,10 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -subj "//CN=grafana.local"  # the first / is to escape, only for windows os and bash
 
 openssl pkcs12 -export -out grafana.pfx -inkey grafana.key -in grafana.crt
+
+
+sudo certbot certonly --standalone -d grafana-project-rafe.eastus.cloudapp.azure.com --email stefanorafe@gmail.com --agree-tos
+
 ```
 
 ### 2. Provision PostgreSQL Flexible Server
