@@ -211,7 +211,7 @@ Before deploying VMs, databases, and Grafana, we first build the networking foun
 
 Once networking is in place, we deploy compute, databases, and application services.
 
-### 1. Deploy Azure VM Scale Set (VMSS) and Load Balancer
+### 1. Deploy Azure VM Scale Set (VMSS) and Application Gateway
 
 > ⚠️ VMSS autoscaling requires the `Microsoft.Insights` resource provider to be registered in your subscription.  
 > If it’s not registered, you’ll see the error:  
@@ -270,6 +270,14 @@ Once networking is in place, we deploy compute, databases, and application servi
 - VMSS instances will join the backend pool of your Load Balancer.
 - Grafana will be available via the LB’s Public IP or DNS.
 - VMSS will scale automatically based on workload.
+
+```bash
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout grafana.key -out grafana.crt \
+  -subj "//CN=grafana.local"  # the first / is to escape, only for windows os and bash
+
+openssl pkcs12 -export -out grafana.pfx -inkey grafana.key -in grafana.crt
+```
 
 ### 2. Provision PostgreSQL Flexible Server
 - In the Azure Portal, go to **Create a resource** → Search for **Azure Database for PostgreSQL Flexible Server**.
